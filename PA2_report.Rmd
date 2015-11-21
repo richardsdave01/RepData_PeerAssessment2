@@ -1,0 +1,123 @@
+---
+title: "Reproducible Research: Peer Assessment 2"
+author: "Dave Richards"
+date: "November 21, 2015"
+output: 
+  html_document:
+    keep_md: true
+---
+
+## Synopsis
+Data from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database was analyzed to determine the types of weather events that have been most harmful with respect to human health, as well as the types that have had the greatest economic consequences. While the data goes back as far as 1950, it was discovered that the current list of 48 event types was instituted in 1996, and that it appears to have been fully implemented in 2003. Therefore, events that occurred before 2003 have not been considered. Further, we saw that, even after 2003, data was not tabulated consistently. In particular, fatalities and injuries resulting from Hurricane Katrina (2005) were not recorded in the expected fields. Some of the missing data may have been included in the remarks field; this analysis did not attempt to parse the remarks for additonal data.
+
+The analysis found that, between 2003 and 2011, tornadoes were responsible for more deaths and injuries than any other type of weather event. It was also found that hurricanes caused more economic damage to property and crops than other event types.
+
+
+
+## Data Processing
+
+### Download and clean
+
+First, data was downloaded from the course website and downloaded into R.
+
+```{r loading, warning=FALSE, cache=TRUE}
+# download data and extract
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(url, destfile = "storm.csv.bz2", method="curl")
+storm <- read.csv("storm.csv.bz2")
+```
+
+A first look at the data 
+```{r firstlook}
+dim(storm)
+str(storm)
+head(storm)
+tail(storm)
+```
+
+Begin and end dates were reformatted to date format
+```{r dates}
+library(lubridate)
+storm$BGN_DATE <- mdy_hms(storm$BGN_DATE)
+storm$END_DATE <- mdy_hms(storm$END_DATE)
+```
+
+Save as an R dataset for future use (faster than rereading csv file)
+```{r save}
+saveRDS(storm, "storm.rds")
+```
+
+Alternatively, if the data has already been saved to an R dataset,
+read the RDS file:
+`storm <- readRDS("storm.rds")`
+
+I created a subset of the data containing only the columns needed for tabulating the results.
+```{r pa2, warning=FALSE, message=FALSE}
+library(dplyr)
+pa2 <-
+        select(
+                storm, EVTYPE, BGN_DATE, END_DATE, FATALITIES, INJURIES, 
+                PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP
+        )
+```
+
+Per https://www.ncdc.noaa.gov/stormevents/details.jsp: "From 1996 to present, 48 event types are recorded as defined in NWS Directive 10-1605." This implies that we don't have to go back any further than 1996 (because 1996 was the first year that all events were tracked). So, we filter out rows from before 1996.
+```{r filt_1996}
+pa2 <- filter(pa2, year(BGN_DATE) >= 1996)
+```
+
+Summarize evtype by year; see that the number of distinct types is near the expected number of 48 starting in 2003.
+```{r sum_types}
+yr <- group_by(pa2, year(BGN_DATE))
+summarize(yr, n_distinct(EVTYPE))
+```
+
+Therefore, I filter out rows from before 2003; later years seem to be the most reliable.
+```{r filt_2003}
+recent <- filter(pa2, year(BGN_DATE) >= 2003)
+dim(recent)
+```
+
+### Harm to population health
+
+Now we try to answer the question, "Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?"  
+Keep only events with casualties (defined as fatalities or injuries)
+```{r evCas}
+evCas <- filter(recent, FATALITIES > 0 | INJURIES > 0) 
+# now we have 6371 events...
+dim(evCas)
+# ... and 46 unique event types
+unique(evCas$EVTYPE)
+```
+
+Calculate number of casualties for each event, and summarize by event type
+```{r sum_cas}
+evCas <- mutate(evCas, casualties = FATALITIES + INJURIES)
+
+evByCas <- evCas %>%
+        group_by(EVTYPE) %>%
+        summarize(totalCas = sum(casualties)) %>%
+        arrange(desc(totalCas))
+evByCas
+```
+
+The number of casualties for hurricanes seems low, let's check further. Consider any EVTYPE containing "HURRICANE".
+```{r grep_hurr}
+evByCas[grep("HURRICANE", evByCas$EVTYPE),]
+```
+
+That can't be right, we know Hurricane Katrina (2005) alone had at least 1200 deaths (See http://fivethirtyeight.com/features/we-still-dont-know-how-many-people-died-because-of-katrina/.) 
+
+Going back to the orignal *storm* dataset, we find 15 hurricane events between 2005-08-15 (Katrina landfall was 2005-08-29, see previous link) and the end of 2005.
+```{r grep_katrina}
+recentHurr <- storm[grep("HURRICANE", storm$EVTYPE),]
+Hurr2005 <- filter(recentHurr, BGN_DATE >= "2005-08-15" & BGN_DATE <= "2005-12-31")
+Hurr2005 <- Hurr2005[grep("Katrina", Hurr2005$REMARKS), ]
+select(Hurr2005, FATALITIES, INJURIES)
+```
+
+We discover that the remarks for 14 events reference Katrina. It looks like each zone has entered its own event.  
+
+Unfortunately, these events only add up to a total of 24 fataliies and 107 injuries. We know this is not accurate. A future analysis might look into other data sources and/or the remarks in this dataset for additonal information. The results I present should be viewed with that in mind.
+
+### Economic consequences
