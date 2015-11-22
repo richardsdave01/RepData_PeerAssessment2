@@ -7,7 +7,7 @@ Data from the U.S. National Oceanic and Atmospheric Administration's (NOAA) stor
 
 The analysis found that, between 2003 and 2011, tornadoes were responsible for more deaths and injuries than any other type of weather event. It was also found that hurricanes caused more economic damage to property and crops than other event types.
 
-
+***
 
 ## Data Processing
 
@@ -398,6 +398,7 @@ We discover that the remarks for 14 events reference Katrina. It looks like each
 
 Unfortunately, these events only add up to a total of 24 fataliies and 107 injuries. We know this is not accurate. A future analysis might look into other data sources and/or the remarks in this dataset for additonal information. The results I present should be viewed with that in mind.
 
+
 ### Economic consequences
 
 Going back to the *recent* dataset (2003-2011), filter out events with zero damage recorded.
@@ -551,7 +552,7 @@ calcdam <- function(dam, exp) {
 ```
 
 We use that function to calculate the property and crop damage for each event. We then add the property and crop damage to get the total damage per event.
-(This takes a long time to run -- in the markdown doc, cache is set to true. No doubt someone could rewrite the calcdam function to improve performance.)
+(This takes a long time to run -- in the markdown doc, cache is set to true. No doubt, the calcdam function could be rewritten to improve performance.)
 
 ```r
 for(i in 1:dim(evProp)[1])
@@ -613,7 +614,7 @@ evProp[evProp$PROPDMG > 1e+11,]
 evProp <- filter(evProp, PROPDMG < 1e+11)
 ```
 
-Finally, add up damage by event type and keep the most damaging types.
+Finally, we add up damage by event type.
 
 ```r
 evByProp <- evProp %>%
@@ -641,8 +642,39 @@ evByProp
 ## ..               ...         ...
 ```
 
+***
+
+## Results
+
+
 ```r
-# Keep top 10 by damage
-evByProp10 <- evByProp[1:10,]
+evByCas10 <- evByCas[1:10,]  #Keep the top 10 types by casualties
+library(ggplot2)
+g1 <- ggplot(evByCas10, aes(EVTYPE, totalCas)) +
+        geom_bar(stat = "identity", aes(fill = EVTYPE)) +
+        coord_flip() +
+        labs(x = "Event Type", y = "Total Casualities (Fatalities + Injuries)", 
+             title = "Total Casualities by Event Type, 2003-2011")
+g1
 ```
 
+![](PA2_report_files/figure-html/plotcas-1.png) 
+
+**Despite the known problems with the data, we can infer that tornadoes are likely the most harmful to health in terms of deaths and injuries.**
+
+
+```r
+evByProp10 <- evByProp[1:10,]  #Keep the top 10 types by damage
+g2 <- ggplot(evByProp10, aes(EVTYPE, totByProp)) +
+        geom_bar(stat = "identity", aes(fill = EVTYPE)) +
+        coord_flip() +
+        labs(x = "Event Type", y = "Total Damage (Property + Crop)", 
+             title = "Total Damage by Event Type, 2003-2011")
+g2
+```
+
+![](PA2_report_files/figure-html/plotdam-1.png) 
+
+**Despite the known problems with the data, we can infer that hurricanes have the greatest economic consequences in terms of property and crop damage. **  
+
+Storm Surge and Storm Surge/Tide are probably interchangable, but even if the two types are added together they obviously are well behind hurricanes.
