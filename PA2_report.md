@@ -399,3 +399,250 @@ We discover that the remarks for 14 events reference Katrina. It looks like each
 Unfortunately, these events only add up to a total of 24 fataliies and 107 injuries. We know this is not accurate. A future analysis might look into other data sources and/or the remarks in this dataset for additonal information. The results I present should be viewed with that in mind.
 
 ### Economic consequences
+
+Going back to the *recent* dataset (2003-2011), filter out events with zero damage recorded.
+
+```r
+evProp <- filter(recent, PROPDMG > 0 | CROPDMG > 0)
+head(evProp)
+```
+
+```
+##      EVTYPE   BGN_DATE   END_DATE FATALITIES INJURIES PROPDMG PROPDMGEXP
+## 1 TSTM WIND 2003-02-22 2003-02-22          0        0       3          K
+## 2 TSTM WIND 2003-02-22 2003-02-22          0        0       3          K
+## 3      HAIL 2003-01-22 2003-01-22          0        0       3          K
+## 4 TSTM WIND 2003-01-22 2003-01-22          0        0      35          K
+## 5 TSTM WIND 2003-02-04 2003-02-04          0        0       1          K
+## 6 TSTM WIND 2003-02-15 2003-02-15          0        0       8          K
+##   CROPDMG CROPDMGEXP
+## 1       0           
+## 2       0           
+## 3       0          K
+## 4       0          K
+## 5       0          K
+## 6       0
+```
+
+```r
+tail(evProp)
+```
+
+```
+##              EVTYPE   BGN_DATE   END_DATE FATALITIES INJURIES PROPDMG
+## 120687 WINTER STORM 2011-11-09 2011-11-10          0        0     2.0
+## 120688 WINTER STORM 2011-11-09 2011-11-10          0        0     5.0
+## 120689  STRONG WIND 2011-11-23 2011-11-23          0        0     0.6
+## 120690  STRONG WIND 2011-11-13 2011-11-13          0        0     1.0
+## 120691      DROUGHT 2011-11-01 2011-11-28          0        0     2.0
+## 120692    HIGH WIND 2011-11-30 2011-11-30          0        0     7.5
+##        PROPDMGEXP CROPDMG CROPDMGEXP
+## 120687          K       0          K
+## 120688          K       0          K
+## 120689          K       0          K
+## 120690          K       0          K
+## 120691          K       0          K
+## 120692          K       0          K
+```
+
+There are 56 unique event types that caused property damage
+
+```r
+unique(evProp$EVTYPE)
+```
+
+```
+##  [1] TSTM WIND                HAIL                    
+##  [3] TORNADO                  FLASH FLOOD             
+##  [5] LIGHTNING                FLOOD                   
+##  [7] STRONG WIND              HIGH WIND               
+##  [9] HEAVY SNOW               AVALANCHE               
+## [11] WILDFIRE                 DUST DEVIL              
+## [13] HEAVY RAIN               STORM SURGE             
+## [15] ICE STORM                WINTER STORM            
+## [17] DUST STORM               WILD/FOREST FIRE        
+## [19] LANDSLIDE                DENSE FOG               
+## [21] URBAN/SML STREAM FLD     EXCESSIVE HEAT          
+## [23] WINTER WEATHER/MIX       BLIZZARD                
+## [25] FROST/FREEZE             ASTRONOMICAL HIGH TIDE  
+## [27] TROPICAL STORM           EXTREME WINDCHILL       
+## [29] EXTREME COLD/WIND CHILL  DROUGHT                 
+## [31] HEAVY SURF/HIGH SURF     HURRICANE/TYPHOON       
+## [33] MARINE TSTM WIND         TROPICAL DEPRESSION     
+## [35] WATERSPOUT               COASTAL FLOOD           
+## [37] HIGH SURF                FUNNEL CLOUD            
+## [39] SEICHE                   LAKE-EFFECT SNOW        
+## [41] WINTER WEATHER           MARINE HIGH WIND        
+## [43] THUNDERSTORM WIND        TSUNAMI                 
+## [45] STORM SURGE/TIDE         HEAT                    
+## [47] LAKESHORE FLOOD          MARINE STRONG WIND      
+## [49] MARINE THUNDERSTORM WIND COLD/WIND CHILL         
+## [51] ASTRONOMICAL LOW TIDE    HURRICANE               
+## [53] DENSE SMOKE              MARINE HAIL             
+## [55] FREEZING FOG             RIP CURRENT             
+## 985 Levels:    HIGH SURF ADVISORY  COASTAL FLOOD ... WND
+```
+
+Next, we look at the unique values of PROPDMGEXP and CROPDMGEXP.
+
+```r
+unique(evProp$PROPDMGEXP)
+```
+
+```
+## [1] K M B  
+## Levels:  - ? + 0 1 2 3 4 5 6 7 8 B h H K m M
+```
+
+```r
+unique(evProp$CROPDMGEXP)
+```
+
+```
+## [1]   K M B
+## Levels:  ? 0 2 B k K m M
+```
+
+We see K, M, B, presumably for thousands, millions, billions.  
+We also see some blanks, but no rows have a value greater that zero and blanks for a type of damage (CROP or PROP).
+
+```r
+count(evProp[evProp$PROPDMGEXP == "" & evProp$PROPDMG != 0,])
+```
+
+```
+## Source: local data frame [1 x 1]
+## 
+##       n
+##   (int)
+## 1     0
+```
+
+```r
+count(evProp[evProp$CROPDMGEXP == "" & evProp$CROPDMG != 0,])
+```
+
+```
+## Source: local data frame [1 x 1]
+## 
+##       n
+##   (int)
+## 1     0
+```
+
+With that knowledge, we write a function that calculates the damage given the damage supplied and the exp.
+
+```r
+calcdam <- function(dam, exp) {
+        
+        if (exp == "K") {
+                dam * 1000
+        }
+        else if (exp == "M") {
+                dam * 1000000
+        }
+        else if (exp == "B") {
+                dam * 1000000000
+        }
+        else if (exp == "") {
+                0
+        }
+}
+```
+
+We use that function to calculate the property and crop damage for each event. We then add the property and crop damage to get the total damage per event.
+(This takes a long time to run -- in the markdown doc, cache is set to true. No doubt someone could rewrite the calcdam function to improve performance.)
+
+```r
+for(i in 1:dim(evProp)[1])
+{
+        evProp$PROPDMG[i] <-
+                calcdam(evProp$PROPDMG[i], evProp$PROPDMGEXP[i])
+        evProp$CROPDMG[i] <-
+                calcdam(evProp$CROPDMG[i], evProp$CROPDMGEXP[i])
+}
+
+evProp <- mutate(evProp, totDamage = PROPDMG + CROPDMG)
+```
+
+Now we look at the top ten individual events in terms of damage.
+
+```r
+arrange(evProp, desc(totDamage))[1:10,]
+```
+
+```
+##               EVTYPE   BGN_DATE   END_DATE FATALITIES INJURIES   PROPDMG
+## 1              FLOOD 2006-01-01 2006-01-01          0        0 1.150e+11
+## 2        STORM SURGE 2005-08-29 2005-08-29          0        0 3.130e+10
+## 3  HURRICANE/TYPHOON 2005-08-28 2005-08-29          0        0 1.693e+10
+## 4        STORM SURGE 2005-08-29 2005-08-29          0        0 1.126e+10
+## 5  HURRICANE/TYPHOON 2005-10-24 2005-10-24          5        0 1.000e+10
+## 6  HURRICANE/TYPHOON 2005-08-29 2005-08-29         15      104 5.880e+09
+## 7  HURRICANE/TYPHOON 2005-08-28 2005-08-29          0        0 7.350e+09
+## 8  HURRICANE/TYPHOON 2004-08-13 2004-08-13          7      780 5.420e+09
+## 9  HURRICANE/TYPHOON 2004-09-04 2004-09-05          0        0 4.830e+09
+## 10 HURRICANE/TYPHOON 2004-09-13 2004-09-16          7        0 4.000e+09
+##    PROPDMGEXP  CROPDMG CROPDMGEXP    totDamage
+## 1           B 3.25e+07          M 115032500000
+## 2           B 0.00e+00             31300000000
+## 3           B 0.00e+00             16930000000
+## 4           B 0.00e+00             11260000000
+## 5           B 0.00e+00             10000000000
+## 6           B 1.51e+09          B   7390000000
+## 7           B 0.00e+00              7350000000
+## 8           B 2.85e+08          M   5705000000
+## 9           B 9.32e+07          M   4923200000
+## 10          B 2.50e+07          M   4025000000
+```
+
+First on the list is the outlier that was discussed in the discussion forum (General Discussion / A Few Words Of Advice). This is a flood event where the property damage was obviously miscoded with an exp of "B" rather than "M". We exclude that outlier.
+
+```r
+evProp[evProp$PROPDMG > 1e+11,]
+```
+
+```
+##       EVTYPE   BGN_DATE   END_DATE FATALITIES INJURIES  PROPDMG PROPDMGEXP
+## 31147  FLOOD 2006-01-01 2006-01-01          0        0 1.15e+11          B
+##        CROPDMG CROPDMGEXP    totDamage
+## 31147 32500000          M 115032500000
+```
+
+```r
+evProp <- filter(evProp, PROPDMG < 1e+11)
+```
+
+Finally, add up damage by event type and keep the most damaging types.
+
+```r
+evByProp <- evProp %>%
+        group_by(EVTYPE) %>%
+        summarize(totByProp = sum(totDamage)) %>%
+        arrange(desc(totByProp))
+evByProp
+```
+
+```
+## Source: local data frame [56 x 2]
+## 
+##               EVTYPE   totByProp
+##               (fctr)       (dbl)
+## 1  HURRICANE/TYPHOON 71738712800
+## 2        STORM SURGE 43157757000
+## 3              FLOOD 21479636630
+## 4            TORNADO 17825459360
+## 5        FLASH FLOOD 11253948210
+## 6               HAIL 10089851830
+## 7            DROUGHT  5531949000
+## 8          HIGH WIND  5211832010
+## 9           WILDFIRE  5054117800
+## 10  STORM SURGE/TIDE  4642038000
+## ..               ...         ...
+```
+
+```r
+# Keep top 10 by damage
+evByProp10 <- evByProp[1:10,]
+```
+

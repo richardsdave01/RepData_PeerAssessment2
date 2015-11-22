@@ -121,3 +121,85 @@ We discover that the remarks for 14 events reference Katrina. It looks like each
 Unfortunately, these events only add up to a total of 24 fataliies and 107 injuries. We know this is not accurate. A future analysis might look into other data sources and/or the remarks in this dataset for additonal information. The results I present should be viewed with that in mind.
 
 ### Economic consequences
+
+Going back to the *recent* dataset (2003-2011), filter out events with zero damage recorded.
+```{r evProp}
+evProp <- filter(recent, PROPDMG > 0 | CROPDMG > 0)
+head(evProp)
+tail(evProp)
+```
+
+There are 56 unique event types that caused property damage
+```{r Propunique}
+unique(evProp$EVTYPE)
+```
+
+Next, we look at the unique values of PROPDMGEXP and CROPDMGEXP.
+```{r expunique}
+unique(evProp$PROPDMGEXP)
+unique(evProp$CROPDMGEXP)
+```
+
+We see K, M, B, presumably for thousands, millions, billions.  
+We also see some blanks, but no rows have a value greater that zero and blanks for a type of damage (CROP or PROP).
+```{r expblank}
+count(evProp[evProp$PROPDMGEXP == "" & evProp$PROPDMG != 0,])
+count(evProp[evProp$CROPDMGEXP == "" & evProp$CROPDMG != 0,])
+```
+
+With that knowledge, we write a function that calculates the damage given the damage supplied and the exp.
+```{r calcdam}
+calcdam <- function(dam, exp) {
+        
+        if (exp == "K") {
+                dam * 1000
+        }
+        else if (exp == "M") {
+                dam * 1000000
+        }
+        else if (exp == "B") {
+                dam * 1000000000
+        }
+        else if (exp == "") {
+                0
+        }
+}
+```
+
+We use that function to calculate the property and crop damage for each event. We then add the property and crop damage to get the total damage per event.
+(This takes a long time to run -- in the markdown doc, cache is set to true. No doubt someone could rewrite the calcdam function to improve performance.)
+```{r totdam, cache=TRUE}
+for(i in 1:dim(evProp)[1])
+{
+        evProp$PROPDMG[i] <-
+                calcdam(evProp$PROPDMG[i], evProp$PROPDMGEXP[i])
+        evProp$CROPDMG[i] <-
+                calcdam(evProp$CROPDMG[i], evProp$CROPDMGEXP[i])
+}
+
+evProp <- mutate(evProp, totDamage = PROPDMG + CROPDMG)
+```
+
+Now we look at the top ten individual events in terms of damage.
+```{r top10indiv}
+arrange(evProp, desc(totDamage))[1:10,]
+```
+
+First on the list is the outlier that was discussed in the discussion forum (General Discussion / A Few Words Of Advice). This is a flood event where the property damage was obviously miscoded with an exp of "B" rather than "M". We exclude that outlier.
+```{r outlier}
+evProp[evProp$PROPDMG > 1e+11,]
+evProp <- filter(evProp, PROPDMG < 1e+11)
+```
+
+Finally, add up damage by event type and keep the most damaging types.
+```{r top10types}
+evByProp <- evProp %>%
+        group_by(EVTYPE) %>%
+        summarize(totByProp = sum(totDamage)) %>%
+        arrange(desc(totByProp))
+evByProp
+# Keep top 10 by damage
+evByProp10 <- evByProp[1:10,]
+```
+
+## Results
